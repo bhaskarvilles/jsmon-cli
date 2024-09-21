@@ -7,7 +7,6 @@ import (
 	"strings"
 )
 
-// Custom string slice flag type to handle multiple `-H` headers
 type stringSliceFlag []string
 
 func (s *stringSliceFlag) String() string {
@@ -19,7 +18,7 @@ func (s *stringSliceFlag) Set(value string) error {
 	return nil
 }
 
-// Centralized function to load and validate the API key
+// Helper to validate and handle API key
 func handleAPIKey(apiKeyFlag *string) {
 	if *apiKeyFlag != "" {
 		setAPIKey(*apiKeyFlag)
@@ -33,7 +32,7 @@ func handleAPIKey(apiKeyFlag *string) {
 	}
 }
 
-// Centralized domain splitting and trimming logic
+// Helper to handle domains (replacing repeated logic)
 func parseDomains(domainStr string) []string {
 	domains := strings.Split(domainStr, ",")
 	for i, domain := range domains {
@@ -42,122 +41,168 @@ func parseDomains(domainStr string) []string {
 	return domains
 }
 
-// Command Execution Functions
-func executeCommands(cmdFlag string, headers stringSliceFlag, size int) {
-	switch cmdFlag {
-	case "scanFile":
+// Central execution hub for most general flags
+func executeCommand(
+	scanFileId, uploadFile *string,
+	viewurls *bool, viewurlsSize int,
+	uploadUrl *string, headers stringSliceFlag,
+	rescanDomainFlag *string, totalAnalysisDataFlag *bool,
+	searchUrlsByDomainFlag *string, urlswithmultipleResponse *bool,
+	viewEmails *string, getResultByJsmonId *string,
+	reverseSearchResults *string, getResultByFileId *string,
+	s3domains *string, ips *string, gql *string,
+	domainUrl *string, apiPath *string, scanUrl *string,
+	scanDomainFlag *string, wordsFlag *string, usageFlag *bool,
+	getDomainsFlag *bool, getAllResults *string, size int,
+	socialMediaUrls *string,
+) {
+	switch {
+	case *scanFileId != "":
 		scanFileEndpoint(*scanFileId)
-	case "uploadFile":
+	case *uploadFile != "":
 		uploadFileEndpoint(*uploadFile, headers)
-	case "viewURLs":
-		viewUrls(size)
-	case "viewFiles":
-		viewFiles()
-	case "rescanDomain":
+	case *viewurls:
+		viewUrls(viewurlsSize)
+	case *uploadUrl != "":
+		uploadUrlEndpoint(*uploadUrl, headers)
+	case *rescanDomainFlag != "":
 		rescanDomain(*rescanDomainFlag)
-	case "totalAnalysisData":
+	case *totalAnalysisDataFlag:
 		totalAnalysisData()
-	case "searchUrlsByDomain":
+	case *searchUrlsByDomainFlag != "":
 		searchUrlsByDomain(*searchUrlsByDomainFlag)
-	case "changedUrls":
+	case *urlswithmultipleResponse:
 		urlsmultipleResponse()
+	case *viewEmails != "":
+		domains := parseDomains(*viewEmails)
+		getEmails(domains)
+	case *getResultByJsmonId != "":
+		getAutomationResultsByJsmonId(strings.TrimSpace(*getResultByJsmonId))
+	case *reverseSearchResults != "":
+		parts := strings.SplitN(*reverseSearchResults, "=", 2)
+		if len(parts) != 2 {
+			fmt.Println("Invalid format for reverseSearchResults. Use field=value format.")
+			return
+		}
+		field := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		getAutomationResultsByInput(field, value)
+	case *getResultByFileId != "":
+		getAutomationResultsByFileId(strings.TrimSpace(*getResultByFileId))
+	case *s3domains != "":
+		domains := parseDomains(*s3domains)
+		getS3Domains(domains)
+	case *ips != "":
+		domains := parseDomains(*ips)
+		getAllIps(domains)
+	case *gql != "":
+		domains := parseDomains(*gql)
+		getGqlOps(domains)
+	case *domainUrl != "":
+		domains := parseDomains(*domainUrl)
+		getDomainUrls(domains)
+	case *apiPath != "":
+		domains := parseDomains(*apiPath)
+		getApiPaths(domains)
+	case *scanUrl != "":
+		rescanUrlEndpoint(*scanUrl)
+	case *scanDomainFlag != "":
+		words := []string{}
+		if *wordsFlag != "" {
+			words = strings.Split(*wordsFlag, ",")
+		}
+		automateScanDomain(*scanDomainFlag, words)
+	case *usageFlag:
+		callViewProfile()
 	}
 }
 
-// Setup function to initialize flags
-func getFlags() (stringSliceFlag, *string, *string, *string, *string, *bool, *int, *bool, *int, *bool) {
-	var headers stringSliceFlag
-	scanUrl := flag.String("scanUrl", "", "URL or scan ID to rescan")
-	uploadUrl := flag.String("uploadUrl", "", "URL to upload for scanning")
-	apiKeyFlag := flag.String("apikey", "", "API key for authentication")
-	scanFileId := flag.String("scanFile", "", "File ID to scan")
-	uploadFile := flag.String("uploadFile", "", "Path to local file to upload for scanning.")
-	getAllResults := flag.String("getAutomationData", "", "Get all automation results")
-	sizeFlag := flag.Int("size", 10000, "Number of results to fetch (default 10000)")
-	getScannerResultsFlag := flag.Bool("getScannerData", false, "Get scanner results")
-	viewURLsFlag := flag.Bool("urls", false, "View all URLs")
-	viewURLsSize := flag.Int("urlSize", 10, "Number of URLs to fetch")
-	flag.Var(&headers, "H", "Custom headers in the format 'Key: Value' (can be used multiple times)")
-	return headers, scanUrl, uploadUrl, scanFileId, uploadFile, getScannerResultsFlag, sizeFlag, viewURLsFlag, viewURLsSize
-}
+// Refactored usage output
+func printUsage() {
+	fmt.Printf("Usage of %s:\n", os.Args[0])
+	fmt.Printf("  %s [flags]\n\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "INPUT FLAGS:\n")
+	options := []struct {
+		flagName, description string
+	}{
+		{"-scanUrl <URL>", "Scan URL or scan ID for rescanning"},
+		{"-uploadUrl <URL>", "Upload file or URL for scanning"},
+		{"-scanFile <fileId>", "Provide file ID for scanning"},
+		{"-uploadFile <string>", "Upload local file to the system"},
+		{"-scanDomain <domain>", "Trigger scan automation on domain"},
+		{"-getAutomationData <domain>", "Retrieve all automation data results"},
+		{"-apikey <string>", "API Key for authentication"},
+	}
 
-func usageFunc(programName string) {
-	fmt.Printf("Usage of %s:\n", programName)
-	fmt.Println("  [flags]")
+	for _, opt := range options {
+		fmt.Fprintf(os.Stderr, "  %-30s %s\n", opt.flagName, opt.description)
+	}
 
-	fmt.Fprintln(os.Stderr, "Flags:")
-	fmt.Fprintf(os.Stderr, "  -apikey <XXXXXX-XXXX-XXXX-XXXX-XXXXXX>          API key for authentication\n")
-	fmt.Fprintf(os.Stderr, "  -scanFile <fileId>         File ID to scan\n")
-	fmt.Fprintf(os.Stderr, "  -uploadFile <filePath>     Path to local file to upload for scanning\n")
-	fmt.Fprintf(os.Stderr, "  -urls                    View all URLs\n")
-	fmt.Fprintf(os.Stderr, "  -urlSize <int>            Number of URLs to fetch (default 10)\n")
-	fmt.Fprintln(os.Stderr, "\nCRON JOB FLAGS:")
-	fmt.Fprintln(os.Stderr, "  -notifications <string>    Set cronjob notification channel.")
-	fmt.Fprintln(os.Stderr, "  -time <int64>              Set cronjob time.")
-	fmt.Fprintln(os.Stderr, "\nMORE OPTIONS:")
-	fmt.Fprintln(os.Stderr, "  -H <custom header>         Custom headers for requests (can repeat)")
+	// Call flag's default usage for other options
+	fmt.Fprintf(os.Stderr, "\nAdditional flags:\n")
 	flag.PrintDefaults()
 }
 
 func main() {
-	headers, scanUrl, _, scanFileId, uploadFile, getScannerResultsFlag, sizeFlag, viewURLsFlag, viewURLsSize := getFlags()
+	// Flag declarations
+	scanUrl := flag.String("scanUrl", "", "URL or scan ID to rescan")
+	uploadUrl := flag.String("uploadUrl", "", "URL to upload for scanning")
+	apiKeyFlag := flag.String("apikey", "", "API key for authentication")
+	scanFileId := flag.String("scanFile", "", "File ID for scanning")
+	uploadFile := flag.String("uploadFile", "", "Path to local file to upload for scanning")
+	getAllResults := flag.String("getAutomationData", "", "Get all automation results")
+	size := flag.Int("size", 10000, "Number of results to fetch (default 10000)")
+	getScannerResultsFlag := flag.Bool("getScannerData", false, "Get scanner results")
+	viewurls := flag.Bool("urls", false, "View URLs")
+	viewurlsSize := flag.Int("urlSize", 10, "Number of URLs to fetch")
+	scanDomainFlag := flag.String("scanDomain", "", "Automate scan for domain")
+	wordsFlag := flag.String("words", "", "Comma-separated list of words for scan")
+	urlswithmultipleResponse := flag.Bool("changedUrls", false, "Check for URLs with multiple responses")
+	getDomainsFlag := flag.Bool("getDomains", false, "Get all user domains")
+	// Declaring custom header -H flag
+	var headers stringSliceFlag
+	flag.Var(&headers, "H", "Custom headers provided as 'Key: Value' (multiple allowed)")
 
-	// Custom usage when no arguments
-	flag.Usage = func() {
-		usageFunc(os.Args[0])
-	}
+	// Additional flags
+	usageFlag := flag.Bool("usage", false, "View user profile")
+	viewfiles := flag.Bool("getFiles", false, "View files")
+	viewEmails := flag.String("getEmails", "", "View Emails for specified domains")
+	s3domains := flag.String("getS3Domains", "", "Get S3 domains for specified domains")
+	ips := flag.String("getIps", "", "Get IPs for specified domains")
+	gql := flag.String("getGqlOps", "", "Get GraphQL operations")
+	domainUrl := flag.String("getDomainUrls", "", "Get domain URLs")
+	apiPath := flag.String("getApiPaths", "", "Get API paths for domain")
+	totalAnalysisDataFlag := flag.Bool("totalAnalysisData", false, "Retrieve total count of overall analysis data")
+	reverseSearchResults := flag.String("reverseSearchResults", "", "Specify search by input field (e.g., emails, domainname)")
+	getResultByJsmonId := flag.String("getResultByJsmonId", "", "Get automation results by jsmon ID")
+	getResultByFileId := flag.String("getResultByFileId", "", "Get file automation results based on file ID")
+	rescanDomainFlag := flag.String("rescanDomain", "", "Rescan all URLs for a specific domain")
 
-	// Parse command-line arguments
+	// Custom usage function
+	flag.Usage = printUsage
 	flag.Parse()
 
 	// Handle API key validation
-	apiKeyFlag := flag.String("apikey", "", "API key for authentication")
 	handleAPIKey(apiKeyFlag)
 
-	// Check if no arguments provided or only an API key
+	// Check if no flag passed, default to `Usage`
 	if flag.NFlag() == 0 || (flag.NFlag() == 1 && *apiKeyFlag != "") {
 		fmt.Println("No action specified. Use -h or --help for usage information.")
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	// Execute the appropriate function based on the provided flag
-	if *scanFileId != "" {
-		executeCommands("scanFile", headers, *sizeFlag)
-	} else if *uploadFile != "" {
-		executeCommands("uploadFile", headers, *sizeFlag)
-	} else if *viewURLsFlag {
-		executeCommands("viewURLs", headers, *viewURLsSize)
-	} else if *getScannerResultsFlag {
-		executeCommands("getScannerResults", headers, *sizeFlag)
-	} else {
-		// No valid action specified
-		fmt.Println("No valid action specified.")
-		flag.Usage()
-		os.Exit(1)
-	}
+	// Execute commands based on parsed flags
+	executeCommand(
+		scanFileId, uploadFile,
+		viewurls, *viewurlsSize,
+		uploadUrl, headers,
+		rescanDomainFlag, totalAnalysisDataFlag,
+		scanDomainFlag, urlswithmultipleResponse,
+		viewEmails, getResultByJsmonId, reverseSearchResults,
+		getResultByFileId, s3domains, ips,
+		gql, domainUrl, apiPath,
+		scanDomainFlag, wordsFlag, usageFlag, getDomainsFlag,
+		getAllResults, *size, s3domains,
+	)
 }
-
-// type Args struct {
-// 	Cron             string
-// 	CronNotification string
-// 	CronTime         int64
-// 	CronType         string
-// }
-
-// func parseArgs() Args {
-// 	//CRON JOB FLAGS ->
-// 	cron := flag.String("cron", "", "Set cronjob.")
-// 	cronNotification := flag.String("notifications", "", "Set cronjob notification.")
-// 	cronTime := flag.Int64("time", 0, "Set cronjob time.")
-// 	cronType := flag.String("type", "", "Set type of cronjob.")
-
-// 	flag.Parse()
-
-// 	return Args{
-// 		Cron:             *cron,
-// 		CronNotification: *cronNotification,
-// 		CronTime:         *cronTime,
-// 		CronType:         *cronType,
-// 	}
-// }
